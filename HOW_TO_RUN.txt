@@ -1,16 +1,23 @@
-# =============================
-#  Terminal GPT (Ollama Version)
-# =============================
+ _____                   _             _            ____ ____ _____ 
+|_   _|__ _ __ _ __ ___ (_)_ __   __ _| |          / ___|  _ \_   _|
+  | |/ _ \ '__| '_ ` _ \| | '_ \ / _` | |  _____  | |  _| |_) || |  
+  | |  __/ |  | | | | | | | | | | (_| | | |_____| | |_| |  __/ | |  
+  |_|\___|_|  |_| |_| |_|_|_| |_|\__,_|_|          \____|_|    |_|  
+
+
+=============================
+ Terminal GPT (Ollama Version)
+=============================
 
 This project is a simple terminal chat app that uses a locally running
-AI model through Ollama. No OpenAI API key or cloud billing needed.
+AI model through Ollama. No OpenAI API key or cloud billing required.
 
 
 ------------------------------------------------------------
 1. Install Dependencies
 ------------------------------------------------------------
 
-Make sure you are inside the project folder first:
+Make sure you are inside the project folder:
 
     cd terminal-gpt
 
@@ -31,7 +38,6 @@ Install required packages:
     pip install requests
 
 
-
 ------------------------------------------------------------
 2. Install Ollama
 ------------------------------------------------------------
@@ -43,8 +49,7 @@ Mac (Homebrew users):
 
     brew install --cask ollama
 
-Once installed, start Ollama (usually starts automatically).
-
+Once installed, start Ollama (it usually launches automatically).
 
 
 ------------------------------------------------------------
@@ -55,8 +60,7 @@ Choose any model you want. Example:
 
     ollama pull llama3.2
 
-Make sure the model name matches the "MODEL" variable in gpt_cli.py
-
+Make sure the model name matches the "MODEL" variable in gpt_cli.py.
 
 
 ------------------------------------------------------------
@@ -84,7 +88,6 @@ Ask a question directly from the command line:
 The program will print the answer and exit.
 
 
-
 ------------------------------------------------------------
 6. Exit the App
 ------------------------------------------------------------
@@ -98,7 +101,6 @@ or:
 
 You can also press:
     Ctrl + C
-
 
 
 ------------------------------------------------------------
@@ -117,9 +119,8 @@ You can also press:
     -> You forgot to pull the model:
        ollama pull llama3.2
 
-• Empty response or no content
-    -> Change to a different model or restart Ollama.
-
+• Empty response or no output
+    -> Try a different model or restart Ollama.
 
 
 ------------------------------------------------------------
