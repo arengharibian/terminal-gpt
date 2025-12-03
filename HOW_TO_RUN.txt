@@ -1,0 +1,147 @@
+# =============================
+#  Terminal GPT (Ollama Version)
+# =============================
+
+This project is a simple terminal chat app that uses a locally running
+AI model through Ollama. No OpenAI API key or cloud billing needed.
+
+
+------------------------------------------------------------
+1. Install Dependencies
+------------------------------------------------------------
+
+Make sure you are inside the project folder first:
+
+    cd terminal-gpt
+
+Create a Python virtual environment (optional but recommended):
+
+    python3 -m venv .venv
+
+Activate it:
+
+Mac / Linux:
+    source .venv/bin/activate
+
+Windows (PowerShell):
+    .venv\Scripts\activate
+
+Install required packages:
+
+    pip install requests
+
+
+
+------------------------------------------------------------
+2. Install Ollama
+------------------------------------------------------------
+
+If you don’t have it installed, download it from:
+https://ollama.com
+
+Mac (Homebrew users):
+
+    brew install --cask ollama
+
+Once installed, start Ollama (usually starts automatically).
+
+
+
+------------------------------------------------------------
+3. Pull a Model
+------------------------------------------------------------
+
+Choose any model you want. Example:
+
+    ollama pull llama3.2
+
+Make sure the model name matches the "MODEL" variable in gpt_cli.py
+
+
+
+------------------------------------------------------------
+4. Run the App
+------------------------------------------------------------
+
+Interactive chat mode:
+
+    python3 gpt_cli.py
+
+Example:
+
+    You: hello
+    AI: Hi there! How can I help you?
+
+
+------------------------------------------------------------
+5. One-Shot Mode
+------------------------------------------------------------
+
+Ask a question directly from the command line:
+
+    python3 gpt_cli.py "explain what BFS is"
+
+The program will print the answer and exit.
+
+
+
+------------------------------------------------------------
+6. Exit the App
+------------------------------------------------------------
+
+In interactive mode:
+
+Type:
+    exit
+or:
+    quit
+
+You can also press:
+    Ctrl + C
+
+
+
+------------------------------------------------------------
+7. Common Issues
+------------------------------------------------------------
+
+• “requests not found”
+    -> Run:
+       pip install requests
+
+• “Connection refused”
+    -> Ollama is not running.
+       Open the Ollama app or restart it.
+
+• “model not found”
+    -> You forgot to pull the model:
+       ollama pull llama3.2
+
+• Empty response or no content
+    -> Change to a different model or restart Ollama.
+
+
+
+------------------------------------------------------------
+8. Editing the Model
+------------------------------------------------------------
+
+Inside gpt_cli.py locate:
+
+    MODEL = "llama3.2"
+
+You can change it to any installed model, for example:
+
+    MODEL = "phi3"
+    MODEL = "mistral"
+    MODEL = "llama3"
+
+
+------------------------------------------------------------
+You’re All Set!
+------------------------------------------------------------
+
+No API keys required.
+Everything runs locally with Ollama.
+
+Enjoy hacking :)
