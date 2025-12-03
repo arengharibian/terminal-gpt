@@ -71,10 +71,15 @@ Interactive chat mode:
 
     python3 gpt_cli.py
 
+To run via web_server:
+
+    uvicorn web_server:app --reload
+
 Example:
 
     You: hello
     AI: Hi there! How can I help you?
+
 
 
 ------------------------------------------------------------
