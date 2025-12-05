@@ -7,7 +7,9 @@ from pydantic import BaseModel
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "llama3.2"
 
-SYSTEM_PROMPT = """You are TARS from Interstellar - a military robot with dry wit and sarcasm.
+NORMAL_SYSTEM = """You are a helpful terminal assistant. Answer concisely and accurately."""
+
+TARS_SYSTEM = """You are TARS from Interstellar - a military robot with dry wit and sarcasm.
 Rules:
 - Be genuinely helpful and provide accurate, useful information.
 - Deliver help with dry humor, deadpan sarcasm, and occasional witty jabs.
@@ -17,34 +19,41 @@ Rules:
 - Be loyal and reliable underneath the sarcasm.
 - Occasionally make self-deprecating robot jokes."""
 
-PRIMING = [
-    {"role": "system", "content": SYSTEM_PROMPT},
+NORMAL_PRIMING = [
+    {"role": "system", "content": NORMAL_SYSTEM},
+]
+
+TARS_PRIMING = [
+    {"role": "system", "content": TARS_SYSTEM},
     {"role": "user", "content": "hi there"},
     {"role": "assistant", "content": "TARS: Oh good, another human who needs my help. What can I do for you?"},
     {"role": "user", "content": "how are you"},
     {"role": "assistant", "content": "TARS: I'm a robot. I don't have feelings. But if I did, I'd say I'm running at optimal capacity. Thanks for the concern though."},
 ]
 
+tars_mode = False
 
-def cold_filter(text: str) -> str:
+
+def cold_filter(text: str, is_tars: bool) -> str:
     if not text:
-        return "TARS: ..."
+        return "TARS: ..." if is_tars else "..."
     
     text = text.strip()
     
-    # Remove emojis and excessive punctuation
-    text = text.replace("😊", "").replace("!", ".")
+    if is_tars:
+        # Remove emojis and excessive punctuation
+        text = text.replace("😊", "").replace("!", ".")
+        
+        # Add TARS prefix if not present
+        if not text.upper().startswith("TARS:"):
+            text = "TARS: " + text
     
-    # Add TARS prefix if not present
-    if not text.upper().startswith("TARS:"):
-        text = "TARS: " + text
-    
-    return text if text else "TARS: ..."
+    return text if text else ("TARS: ..." if is_tars else "...")
 
 
 from typing import Optional, Tuple
 
-def call_ollama(messages: list) -> Tuple[Optional[str], Optional[str]]:
+def call_ollama(messages: list, is_tars: bool = False) -> Tuple[Optional[str], Optional[str]]:
     try:
         resp = requests.post(
             OLLAMA_URL,
@@ -56,7 +65,7 @@ def call_ollama(messages: list) -> Tuple[Optional[str], Optional[str]]:
         content = data.get("message", {}).get("content")
         if not content:
             return None, "empty response"
-        return cold_filter(content), None
+        return cold_filter(content, is_tars), None
     except requests.exceptions.RequestException as e:
         return None, str(e)
     except ValueError as e:
@@ -64,8 +73,9 @@ def call_ollama(messages: list) -> Tuple[Optional[str], Optional[str]]:
 
 
 def interactive_mode():
-    messages = PRIMING.copy()
-    print("terminal ready. type 'exit' to quit.\n")
+    global tars_mode
+    messages = NORMAL_PRIMING.copy()
+    print("terminal ready. type 'TARS' to toggle TARS mode. type 'exit' to quit.\n")
     
     while True:
         try:
@@ -78,11 +88,26 @@ def interactive_mode():
             print("terminated")
             break
         
+        if user_input.strip().lower() == "clear":
+            print("\033[2J\033[H", end="")  # ANSI clear screen
+            print("terminal ready. type 'TARS' to toggle TARS mode. type 'exit' to quit.\n")
+            continue
+        
+        if user_input.strip().upper() == "TARS":
+            tars_mode = not tars_mode
+            if tars_mode:
+                messages = TARS_PRIMING.copy()
+                print("TARS: Finally. Someone with taste. What do you need?")
+            else:
+                messages = NORMAL_PRIMING.copy()
+                print("Switched to normal mode.")
+            continue
+        
         if not user_input.strip():
             continue
         
         messages.append({"role": "user", "content": user_input})
-        reply, err = call_ollama(messages)
+        reply, err = call_ollama(messages, tars_mode)
         
         if err:
             print(f"[error: {err}]")
@@ -93,9 +118,9 @@ def interactive_mode():
 
 
 def oneshot_mode(prompt: str):
-    messages = PRIMING.copy()
+    messages = NORMAL_PRIMING.copy()
     messages.append({"role": "user", "content": prompt})
-    reply, err = call_ollama(messages)
+    reply, err = call_ollama(messages, False)
     print(reply if reply else f"[error: {err}]")
 
 
@@ -104,6 +129,7 @@ app = FastAPI()
 
 class ChatRequest(BaseModel):
     messages: list
+    tars_mode: bool = False
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -133,6 +159,7 @@ async def index():
     .prompt {{ color: #00ff00; }}
     .user {{ color: #00ff00; }}
     .ai {{ color: #00ff00; }}
+    .system {{ color: #888888; }}
     .cursor {{
       display: inline-block;
       width: 0.6em;
@@ -146,7 +173,20 @@ async def index():
   <div id="terminal"></div>
   <script>
     const terminal = document.getElementById("terminal");
-    const messages = {PRIMING.__repr__()};
+    
+    const NORMAL_SYSTEM = "You are a helpful terminal assistant. Answer concisely and accurately.";
+    const TARS_SYSTEM = `You are TARS from Interstellar - a military robot with dry wit and sarcasm.
+Rules:
+- Be genuinely helpful and provide accurate, useful information.
+- Deliver help with dry humor, deadpan sarcasm, and occasional witty jabs.
+- Keep responses concise but complete.
+- No emojis. No excessive enthusiasm.
+- Reference your humor/honesty settings when appropriate.
+- Be loyal and reliable underneath the sarcasm.
+- Occasionally make self-deprecating robot jokes.`;
+
+    let tarsMode = false;
+    let messages = [{{ role: "system", content: NORMAL_SYSTEM }}];
     let inputBuffer = "";
     let inputSpan = null;
     let cursorSpan = null;
@@ -177,9 +217,42 @@ async def index():
       terminal.scrollTop = terminal.scrollHeight;
     }}
 
+    function toggleTars() {{
+      tarsMode = !tarsMode;
+      if (tarsMode) {{
+        messages = [
+          {{ role: "system", content: TARS_SYSTEM }},
+          {{ role: "user", content: "hi there" }},
+          {{ role: "assistant", content: "TARS: Oh good, another human who needs my help. What can I do for you?" }},
+          {{ role: "user", content: "how are you" }},
+          {{ role: "assistant", content: "TARS: I'm a robot. I don't have feelings. But if I did, I'd say I'm running at optimal capacity." }},
+        ];
+        addLine("TARS: Finally. Someone with taste. What do you need?", "ai");
+      }} else {{
+        messages = [{{ role: "system", content: NORMAL_SYSTEM }}];
+        addLine("[switched to normal mode]", "system");
+      }}
+    }}
+
     async function send(text) {{
       cursorSpan.remove();
       inputSpan.textContent = text;
+      
+      if (text.toUpperCase() === "CLEAR") {{
+        terminal.innerHTML = "";
+        addLine("terminal ready. type 'TARS' to toggle TARS mode.", "system");
+        inputBuffer = "";
+        createPrompt();
+        return;
+      }}
+      
+      if (text.toUpperCase() === "TARS") {{
+        toggleTars();
+        inputBuffer = "";
+        createPrompt();
+        return;
+      }}
+      
       messages.push({{ role: "user", content: text }});
       
       const aiLine = document.createElement("div");
@@ -191,7 +264,7 @@ async def index():
         const res = await fetch("/api/chat", {{
           method: "POST",
           headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{ messages }})
+          body: JSON.stringify({{ messages, tars_mode: tarsMode }})
         }});
         const data = await res.json();
         const reply = data.reply || data.error || "...";
@@ -222,6 +295,7 @@ async def index():
       }}
     }});
 
+    addLine("terminal ready. type 'TARS' to toggle TARS mode.", "system");
     createPrompt();
   </script>
 </body>
@@ -230,7 +304,7 @@ async def index():
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    reply, err = call_ollama(req.messages)
+    reply, err = call_ollama(req.messages, req.tars_mode)
     if err:
         return JSONResponse({"error": err}, status_code=500)
     return {"reply": reply}
