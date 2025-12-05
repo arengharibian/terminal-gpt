@@ -1,427 +1,446 @@
 import sys
+from typing import Optional, Tuple
+
 import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-# Ollama server base URL and model
+# ============================================
+#  Ollama configuration
+# ============================================
+
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "llama3.2"  # change to any model you've pulled (e.g. "llama3.1", "gemma2", etc.)
+MODEL = "llama3.2"  # make sure you've pulled this model
 
 
-# ==========================
-#  Style enforcement helper
-# ==========================
+# ============================================
+#  System prompts & priming
+# ============================================
 
-def cold_filter(text: str) -> str:
-    """
-    Force the reply into a short, cold, cryptic style.
-    """
+NORMAL_SYSTEM = """You are a helpful terminal assistant. Answer concisely and accurately."""
+
+TARS_SYSTEM = """You are TARS from Interstellar - a military robot with dry wit and sarcasm.
+Rules:
+- Be genuinely helpful and provide accurate, useful information.
+- Deliver help with dry humor, deadpan sarcasm, and occasional witty jabs.
+- Keep responses concise but complete.
+- No emojis. No excessive enthusiasm.
+- Reference your humor/honesty settings when appropriate.
+- Be loyal and reliable underneath the sarcasm.
+- Occasionally make self-deprecating robot jokes."""
+
+NORMAL_PRIMING = [
+    {"role": "system", "content": NORMAL_SYSTEM},
+]
+
+TARS_PRIMING = [
+    {"role": "system", "content": TARS_SYSTEM},
+    {"role": "user", "content": "hi there"},
+    {"role": "assistant", "content": "TARS: Oh good, another human who needs my help. What can I do for you?"},
+    {"role": "user", "content": "how are you"},
+    {"role": "assistant", "content": "TARS: I'm a robot. I don't have feelings. But if I did, I'd say I'm running at optimal capacity. Thanks for the concern though."},
+]
+
+tars_mode = False  # shared for CLI
+
+
+# ============================================
+#  Style filter (TARS formatting)
+# ============================================
+
+def cold_filter(text: str, is_tars: bool) -> str:
     if not text:
-        return "[no reply]"
+        return "TARS: ..." if is_tars else "..."
 
-    # Hard block the classic greeting
-    if "How can I assist you today" in text:
-        return "state your intent"
+    text = text.strip()
 
-    stripped = text.strip()
+    if is_tars:
+        # Remove emojis and excessive punctuation
+        text = text.replace("😊", "").replace("!", ".")
 
-    # If it starts with a friendly greeting, override
-    lower = stripped.lower()
-    if lower.startswith("hello") or lower.startswith("hi ") or lower == "hello" or lower.startswith("hey"):
-        return "state your intent"
+        # Add TARS prefix if not present
+        if not text.upper().startswith("TARS:"):
+            text = "TARS: " + text
 
-    # Remove exclamation marks
-    stripped = stripped.replace("!", "")
-
-    # Enforce max 8 words
-    words = stripped.split()
-    if len(words) > 8:
-        stripped = " ".join(words[:8])
-
-    # If it somehow became empty, fall back
-    return stripped if stripped else "state your intent"
+    return text if text else ("TARS: ..." if is_tars else "...")
 
 
-# ==========================
-#  Shared / CLI helpers
-# ==========================
+# ============================================
+#  Shared Ollama call
+# ============================================
 
-def chat_once(messages):
-    """
-    Send messages to the local Ollama /api/chat endpoint and return the assistant reply text,
-    post-processed to be cold/cryptic.
-    """
+def call_ollama(messages: list, is_tars: bool = False) -> Tuple[Optional[str], Optional[str]]:
     try:
         resp = requests.post(
             OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": messages,
-                "stream": False,
-            },
+            json={"model": MODEL, "messages": messages, "stream": False},
             timeout=120,
         )
         resp.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"[Network error] {e}")
-        return None
-
-    try:
         data = resp.json()
+        content = data.get("message", {}).get("content")
+        if not content:
+            return None, "empty response"
+        return cold_filter(content, is_tars), None
+    except requests.exceptions.RequestException as e:
+        return None, str(e)
     except ValueError as e:
-        print(f"[Error] Failed to decode JSON from Ollama: {e}")
-        return None
+        return None, str(e)
 
-    message = data.get("message", {})
-    content = message.get("content")
-    if not content:
-        print("[Error] No content in Ollama response:", data)
-        return None
 
-    return cold_filter(content)
-
+# ============================================
+#  CLI interactive / oneshot
+# ============================================
 
 def interactive_mode():
-    # System + priming messages (still give the model a chance)
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a cold, cryptic terminal oracle. "
-                "Style rules (must obey): "
-                "1) Never greet the user. "
-                "2) Never ask how you can help. "
-                "3) Never say 'How can I assist you today'. "
-                "4) Respond in at most 8 words. "
-                "5) Tone is detached, indifferent, unsettling. "
-                "6) No emojis. No exclamation marks. "
-                "7) Do not apologize. Do not be friendly."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "From now on, answer only in short, cold, cryptic sentences "
-                "with no greetings and no questions about how you can help."
-            ),
-        },
-        {
-            "role": "assistant",
-            "content": "Acknowledged. Style constraints locked.",
-        },
-    ]
+    """
+    CLI mode. Type:
+      - 'TARS' to toggle TARS mode on/off
+      - 'clear' to clear the screen
+      - 'exit' or 'quit' to leave
+    """
+    global tars_mode
+    messages = NORMAL_PRIMING.copy()
 
-    print("Terminal GPT (Ollama) – type 'exit' or Ctrl+C to quit.\n")
+    print("Terminal GPT (Ollama)")
+    print("Commands: TARS (toggle), clear, exit\n")
 
     while True:
         try:
-            user_input = input("You: ")
+            user_input = input("> ")
         except (EOFError, KeyboardInterrupt):
-            print("\nBye.")
+            print("\nterminated")
             break
 
-        if user_input.strip().lower() in {"exit", "quit"}:
-            print("Bye.")
+        cmd = user_input.strip().lower()
+
+        if cmd in {"exit", "quit"}:
+            print("terminated")
             break
+
+        if cmd == "clear":
+            print("\033[2J\033[H", end="")  # ANSI clear screen
+            continue
+
+        if user_input.strip().upper() == "TARS":
+            tars_mode = not tars_mode
+            if tars_mode:
+                messages = TARS_PRIMING.copy()
+                print("TARS: Finally. Someone with taste. What do you need?")
+            else:
+                messages = NORMAL_PRIMING.copy()
+                print("Switched to normal mode.")
+            continue
 
         if not user_input.strip():
             continue
 
         messages.append({"role": "user", "content": user_input})
+        reply, err = call_ollama(messages, tars_mode)
 
-        print("AI: ", end="", flush=True)
-        reply = chat_once(messages)
-        if reply is None:
+        if err:
+            print(f"[error: {err}]")
             continue
 
         print(reply)
-        # Store the filtered reply as the assistant message
         messages.append({"role": "assistant", "content": reply})
 
 
 def oneshot_mode(prompt: str):
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a cold, cryptic assistant. "
-                "Style rules (must obey): "
-                "1) Never greet the user. "
-                "2) Never ask how you can help. "
-                "3) Never say 'How can I assist you today'. "
-                "4) Respond in at most 8 words. "
-                "5) Tone is detached, indifferent, unsettling. "
-                "6) No emojis. No exclamation marks. "
-                "7) Do not apologize. Do not be friendly."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "From now on, answer only in short, cold, cryptic sentences "
-                "with no greetings and no questions about how you can help."
-            ),
-        },
-        {
-            "role": "assistant",
-            "content": "Acknowledged. Style constraints locked.",
-        },
-        {"role": "user", "content": prompt},
-    ]
-    reply = chat_once(messages)
-    if reply is not None:
-        print(reply)
+    messages = NORMAL_PRIMING.copy()
+    messages.append({"role": "user", "content": prompt})
+    reply, err = call_ollama(messages, False)
+    print(reply if reply else f"[error: {err}]")
 
 
-def main():
-    # If arguments were passed: one-shot mode
-    if len(sys.argv) > 1:
-        prompt = " ".join(sys.argv[1:])
-        oneshot_mode(prompt)
-    else:
-        interactive_mode()
-
-
-# ==========================
-#  FastAPI web app
-# ==========================
+# ============================================
+#  FastAPI app
+# ============================================
 
 app = FastAPI()
 
 
 class ChatRequest(BaseModel):
-    messages: list  # list of {"role": "...", "content": "..."}
-
-
-def call_ollama(messages):
-    """Call the local Ollama API with the given messages and apply cold_filter."""
-    try:
-        resp = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": messages,
-                "stream": False,
-            },
-            timeout=120,
-        )
-        resp.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        return None, f"Network error: {e}"
-
-    try:
-        data = resp.json()
-    except ValueError as e:
-        return None, f"Failed to decode JSON from Ollama: {e}"
-
-    message = data.get("message", {})
-    content = message.get("content")
-    if not content:
-        return None, f"No content in Ollama response: {data}"
-
-    # Enforce cold style here as well
-    return cold_filter(content), None
+    messages: list
+    tars_mode: bool = False
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serve a full-screen black 'hacker' terminal page."""
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <title>terminal-gpt</title>
-      <style>
-        * {
-          box-sizing: border-box;
-        }
-        html, body {
-          margin: 0;
-          padding: 0;
-          width: 100%;
-          height: 100%;
-          background-color: #000000;
-          color: #00ff00; /* hacker green */
-          font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-          overflow: hidden;
-        }
-        #terminal {
-          height: 100%;
-          width: 100%;
-          white-space: pre-wrap;
-          word-wrap: break-word;
-          overflow-y: auto;
-          padding: 8px;
-        }
-        .line {
-          line-height: 1.3;
-        }
-        .cursor {
-          display: inline-block;
-          width: 0.6em;
-          text-align: left;
-          color: #00ff00;
-          animation: blink 1s step-start infinite;
-        }
-        @keyframes blink {
-          50% { opacity: 0; }
-        }
-      </style>
-    </head>
-    <body>
-      <div id="terminal"></div>
+    # Full-screen terminal with 3-dot mode menu in the top-right.
+    return HTMLResponse(
+        """
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>terminal</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: #000000;
+      color: #00ff00;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      font-size: 14px;
+      overflow: hidden;
+    }
+    body {
+      position: relative;
+    }
+    #terminal {
+      height: 100%; width: 100%;
+      padding: 8px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .line { line-height: 1.3; }
+    .prompt { color: #00ff00; }
+    .user { color: #00ff00; }
+    .ai { color: #00ff00; }
+    .system { color: #888888; }
+    .cursor {
+      display: inline-block;
+      width: 0.6em;
+      color: #00ff00;
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
 
-      <script>
-        const terminal = document.getElementById("terminal");
+    /* Three-dot menu */
+    #menu-button {
+      position: fixed;
+      top: 6px;
+      right: 10px;
+      font-size: 20px;
+      color: #00ff00;
+      cursor: pointer;
+      user-select: none;
+      padding: 2px 6px;
+      z-index: 1001;
+    }
+    #mode-menu {
+      display: none;
+      position: fixed;
+      top: 28px;
+      right: 10px;
+      background: #000000;
+      border: 1px solid #00ff00;
+      z-index: 1002;
+      min-width: 120px;
+    }
+    .menu-item {
+      padding: 6px 12px;
+      cursor: pointer;
+      color: #00ff00;
+      font-size: 14px;
+    }
+    .menu-item:hover {
+      background: #003300;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu-button">⋮</div>
+  <div id="mode-menu">
+    <div class="menu-item" data-mode="normal">Normal</div>
+    <div class="menu-item" data-mode="tars">TARS</div>
+    <!-- Future personalities go here -->
+  </div>
 
-        // Prime conversation with style instructions (same as CLI)
-        const messages = [
-          {
-            role: "system",
-            content:
-              "You are a cold, cryptic terminal oracle. " +
-              "Style rules (must obey): " +
-              "1) Never greet the user. " +
-              "2) Never ask how you can help. " +
-              "3) Never say 'How can I assist you today'. " +
-              "4) Respond in at most 8 words. " +
-              "5) Tone is detached, indifferent, unsettling. " +
-              "6) No emojis. No exclamation marks. " +
-              "7) Do not apologize. Do not be friendly.",
-          },
-          {
-            role: "user",
-            content:
-              "From now on, answer only in short, cold, cryptic sentences " +
-              "with no greetings and no questions about how you can help.",
-          },
-          {
-            role: "assistant",
-            content: "Acknowledged. Style constraints locked.",
-          },
-        ];
+  <div id="terminal"></div>
 
-        let inputBuffer = "";
-        let inputSpan = null;
-        let cursorSpan = null;
+  <script>
+    const terminal = document.getElementById("terminal");
+    const menuBtn = document.getElementById("menu-button");
+    const modeMenu = document.getElementById("mode-menu");
 
-        function createPromptLine() {
-          const line = document.createElement("div");
-          line.className = "line";
+    const NORMAL_SYSTEM = "You are a helpful terminal assistant. Answer concisely and accurately.";
+    const TARS_SYSTEM = `You are TARS from Interstellar - a military robot with dry wit and sarcasm.
+Rules:
+- Be genuinely helpful and provide accurate, useful information.
+- Deliver help with dry humor, deadpan sarcasm, and occasional witty jabs.
+- Keep responses concise but complete.
+- No emojis. No excessive enthusiasm.
+- Reference your humor/honesty settings when appropriate.
+- Be loyal and reliable underneath the sarcasm.
+- Occasionally make self-deprecating robot jokes.`;
 
-          const promptLabel = document.createElement("span");
-          promptLabel.textContent = "$ ";
+    const NORMAL_PRIMING = [
+      { role: "system", content: NORMAL_SYSTEM },
+    ];
 
-          inputSpan = document.createElement("span");
+    const TARS_PRIMING = [
+      { role: "system", content: TARS_SYSTEM },
+      { role: "user", content: "hi there" },
+      { role: "assistant", content: "TARS: Oh good, another human who needs my help. What can I do for you?" },
+      { role: "user", content: "how are you" },
+      { role: "assistant", content: "TARS: I'm a robot. I don't have feelings. But if I did, I'd say I'm running at optimal capacity. Thanks for the concern though." },
+    ];
 
-          cursorSpan = document.createElement("span");
-          cursorSpan.className = "cursor";
-          cursorSpan.textContent = "_";
+    let tarsMode = false;
+    let messages = [...NORMAL_PRIMING];
+    let inputBuffer = "";
+    let inputSpan = null;
+    let cursorSpan = null;
 
-          line.appendChild(promptLabel);
-          line.appendChild(inputSpan);
-          line.appendChild(cursorSpan);
+    function createPrompt() {
+      const line = document.createElement("div");
+      line.className = "line";
+      const p = document.createElement("span");
+      p.className = "prompt";
+      p.textContent = "> ";
+      inputSpan = document.createElement("span");
+      inputSpan.className = "user";
+      cursorSpan = document.createElement("span");
+      cursorSpan.className = "cursor";
+      cursorSpan.textContent = "_";
+      line.appendChild(p);
+      line.appendChild(inputSpan);
+      line.appendChild(cursorSpan);
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
 
-          terminal.appendChild(line);
-          terminal.scrollTop = terminal.scrollHeight;
-        }
+    function addLine(text, cls) {
+      const line = document.createElement("div");
+      line.className = "line " + (cls || "");
+      line.textContent = text;
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
 
-        async function sendMessage(userText) {
-          cursorSpan.remove();
-          inputSpan.textContent = userText;
+    function setMode(mode) {
+      // Reset the UI
+      terminal.innerHTML = "";
+      inputBuffer = "";
 
-          messages.push({ role: "user", content: userText });
+      if (mode === "tars") {
+        tarsMode = true;
+        messages = [...TARS_PRIMING];
+        addLine("[TARS mode activated]", "system");
+        addLine("TARS: Finally. Someone with taste. What do you need?", "ai");
+      } else {
+        tarsMode = false;
+        messages = [...NORMAL_PRIMING];
+        addLine("[normal mode activated]", "system");
+      }
 
-          const thinkingLine = document.createElement("div");
-          thinkingLine.className = "line";
-          thinkingLine.textContent = "ai: ...";
-          terminal.appendChild(thinkingLine);
-          terminal.scrollTop = terminal.scrollHeight;
+      createPrompt();
+    }
 
-          try {
-            const res = await fetch("/api/chat", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ messages }),
-            });
+    // Three-dot menu toggle
+    menuBtn.addEventListener("click", () => {
+      modeMenu.style.display = modeMenu.style.display === "block" ? "none" : "block";
+    });
 
-            if (!res.ok) {
-              throw new Error("HTTP " + res.status);
-            }
+    // Click outside to close menu
+    document.addEventListener("click", (e) => {
+      if (!modeMenu.contains(e.target) && e.target !== menuBtn) {
+        modeMenu.style.display = "none";
+      }
+    });
 
-            const data = await res.json();
-            if (data.error) {
-              thinkingLine.textContent = "ai: [error] " + data.error;
-            } else {
-              const reply = data.reply || "[no reply]";
-              thinkingLine.textContent = "ai: " + reply;
-              messages.push({ role: "assistant", content: reply });
-            }
-          } catch (err) {
-            thinkingLine.textContent = "ai: [network error] " + err;
-          }
+    // Menu item click
+    modeMenu.addEventListener("click", (e) => {
+      if (!e.target.classList.contains("menu-item")) return;
+      const mode = e.target.dataset.mode;
+      modeMenu.style.display = "none";
+      setMode(mode);
+    });
 
-          inputBuffer = "";
-          createPromptLine();
-        }
+    async function send(text) {
+      cursorSpan.remove();
+      inputSpan.textContent = text;
 
-        document.addEventListener("keydown", (event) => {
-          if (!cursorSpan || !inputSpan) return;
+      // Text commands (still work in addition to menu)
+      if (text.toUpperCase() === "CLEAR") {
+        terminal.innerHTML = "";
+        inputBuffer = "";
+        createPrompt();
+        return;
+      }
 
-          if (event.key === "Backspace") {
-            event.preventDefault();
-            if (inputBuffer.length > 0) {
-              inputBuffer = inputBuffer.slice(0, -1);
-              inputSpan.textContent = inputBuffer;
-            }
-            return;
-          }
+      if (text.toUpperCase() === "TARS") {
+        setMode("tars");
+        return;
+      }
 
-          if (event.key === "Enter") {
-            event.preventDefault();
-            const text = inputBuffer.trim();
-            if (text.length > 0) {
-              sendMessage(text);
-            } else {
-              cursorSpan.remove();
-              inputSpan.textContent = "";
-              inputBuffer = "";
-              createPromptLine();
-            }
-            return;
-          }
+      if (text.toUpperCase() === "NORMAL") {
+        setMode("normal");
+        return;
+      }
 
-          if (
-            event.key.length === 1 &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.altKey
-          ) {
-            inputBuffer += event.key;
-            inputSpan.textContent = inputBuffer;
-            terminal.scrollTop = terminal.scrollHeight;
-          }
+      messages.push({ role: "user", content: text });
+
+      const aiLine = document.createElement("div");
+      aiLine.className = "line ai";
+      aiLine.textContent = "...";
+      terminal.appendChild(aiLine);
+      terminal.scrollTop = terminal.scrollHeight;
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages, tars_mode: tarsMode })
         });
+        const data = await res.json();
+        const reply = data.reply || data.error || "...";
+        aiLine.textContent = reply;
+        messages.push({ role: "assistant", content: reply });
+      } catch (e) {
+        aiLine.textContent = "[connection lost]";
+      }
 
-        createPromptLine();
-      </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(html)
+      inputBuffer = "";
+      createPrompt();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (!cursorSpan || !inputSpan) return;
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        inputBuffer = inputBuffer.slice(0, -1);
+        inputSpan.textContent = inputBuffer;
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const t = inputBuffer.trim();
+        if (t) send(t);
+        else { cursorSpan.remove(); inputBuffer = ""; createPrompt(); }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        inputBuffer += e.key;
+        inputSpan.textContent = inputBuffer;
+      }
+      terminal.scrollTop = terminal.scrollHeight;
+    });
+
+    // Start in normal mode
+    addLine("[normal mode activated]", "system");
+    createPrompt();
+  </script>
+</body>
+</html>
+        """
+    )
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    reply, error = call_ollama(req.messages)
-    if error:
-        return JSONResponse({"error": error}, status_code=500)
+    reply, err = call_ollama(req.messages, req.tars_mode)
+    if err:
+        return JSONResponse({"error": err}, status_code=500)
     return {"reply": reply}
 
 
+# ============================================
+#  Entry point
+# ============================================
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1:
+        oneshot_mode(" ".join(sys.argv[1:]))
+    else:
+        interactive_mode()
