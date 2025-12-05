@@ -75,7 +75,6 @@ def call_ollama(messages: list, is_tars: bool = False) -> Tuple[Optional[str], O
 def interactive_mode():
     global tars_mode
     messages = NORMAL_PRIMING.copy()
-    print("terminal ready. type 'TARS' to toggle TARS mode. type 'exit' to quit.\n")
     
     while True:
         try:
@@ -90,7 +89,6 @@ def interactive_mode():
         
         if user_input.strip().lower() == "clear":
             print("\033[2J\033[H", end="")  # ANSI clear screen
-            print("terminal ready. type 'TARS' to toggle TARS mode. type 'exit' to quit.\n")
             continue
         
         if user_input.strip().upper() == "TARS":
@@ -240,7 +238,6 @@ Rules:
       
       if (text.toUpperCase() === "CLEAR") {{
         terminal.innerHTML = "";
-        addLine("terminal ready. type 'TARS' to toggle TARS mode.", "system");
         inputBuffer = "";
         createPrompt();
         return;
@@ -295,7 +292,6 @@ Rules:
       }}
     }});
 
-    addLine("terminal ready. type 'TARS' to toggle TARS mode.", "system");
     createPrompt();
   </script>
 </body>
