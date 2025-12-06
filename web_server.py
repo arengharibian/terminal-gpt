@@ -1,8 +1,12 @@
+import json
+from typing import Optional, Tuple
+
 import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from typing import Optional, Tuple
+
+from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona
 
 # ============================================
 #  Ollama configuration
@@ -13,37 +17,29 @@ MODEL = "llama3.2"  # ollama pull llama3.2
 
 
 # ============================================
-#  System prompts & priming
+#  Style filter
 # ============================================
 
-NORMAL_SYSTEM = """You are a helpful terminal assistant. Answer concisely and accurately."""
-
-TARS_SYSTEM = """You are TARS from Interstellar - a military robot with dry wit and sarcasm.
-Rules:
-- Be genuinely helpful and provide accurate, useful information.
-- Deliver help with dry humor, deadpan sarcasm, and occasional witty jabs.
-- Keep responses concise but complete.
-- No emojis. No excessive enthusiasm.
-- Reference your humor/honesty settings when appropriate.
-- Be loyal and reliable underneath the sarcasm.
-- Occasionally make self-deprecating robot jokes."""
-
-
-def cold_filter(text: str, is_tars: bool) -> str:
-    """Post-process replies slightly. Frontend adds AI:/TARS: labels."""
+def cold_filter(text: str, persona: Persona) -> str:
+    """
+    Light post-processing; for snarky personas (TARS, Ultron) we strip emojis/!!!.
+    The actual 'TARS:' / 'ULTRON:' / 'AI:' labels are added in the frontend.
+    """
     if not text:
         return "..."
 
     text = text.strip()
 
-    if is_tars:
+    if persona.snarky:
         text = text.replace("😊", "").replace("😄", "").replace("!", ".")
 
     return text or "..."
 
 
-def call_ollama(messages: list, is_tars: bool = False) -> Tuple[Optional[str], Optional[str]]:
+def call_ollama(messages: list, persona_id: str) -> Tuple[Optional[str], Optional[str]]:
     """Call local Ollama and return (reply, error)."""
+    persona = PERSONAS.get(persona_id, PERSONAS[DEFAULT_PERSONA_ID])
+
     try:
         resp = requests.post(
             OLLAMA_URL,
@@ -55,7 +51,7 @@ def call_ollama(messages: list, is_tars: bool = False) -> Tuple[Optional[str], O
         content = data.get("message", {}).get("content")
         if not content:
             return None, "empty response"
-        return cold_filter(content, is_tars), None
+        return cold_filter(content, persona), None
     except requests.exceptions.RequestException as e:
         return None, f"network error: {e}"
     except ValueError as e:
@@ -70,13 +66,19 @@ app = FastAPI()
 
 
 class ChatRequest(BaseModel):
-    messages: list          # list of {"role": "...", "content": "..."}
-    tars_mode: bool = False
+    messages: list           # list of {"role": "...", "content": "..."}
+    persona_id: str = DEFAULT_PERSONA_ID
+
+
+# Precompute priming JSON for the frontend
+NORMAL_PRIMING_JS = json.dumps(PERSONAS["normal"].priming)
+TARS_PRIMING_JS   = json.dumps(PERSONAS["tars"].priming)
+ULTRON_PRIMING_JS = json.dumps(PERSONAS["ultron"].priming)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    # Full-screen terminal with three-dot mode menu
+    # Full-screen terminal with three-dot mode menu for all personas
     return HTMLResponse(
         f"""
 <!DOCTYPE html>
@@ -137,7 +139,7 @@ async def index():
       background: #000000;
       border: 1px solid #00ff00;
       z-index: 1002;
-      min-width: 120px;
+      min-width: 140px;
     }}
     .menu-item {{
       padding: 6px 12px;
@@ -155,6 +157,7 @@ async def index():
   <div id="mode-menu">
     <div class="menu-item" data-mode="normal">Normal</div>
     <div class="menu-item" data-mode="tars">TARS</div>
+    <div class="menu-item" data-mode="ultron">Ultron</div>
   </div>
 
   <div id="terminal"></div>
@@ -164,22 +167,13 @@ async def index():
     const menuBtn = document.getElementById("menu-button");
     const modeMenu = document.getElementById("mode-menu");
 
-    const NORMAL_SYSTEM = {NORMAL_SYSTEM!r};
-    const TARS_SYSTEM = {TARS_SYSTEM!r};
+    // Priming pulled from Python personas.py
+    const NORMAL_PRIMING = {NORMAL_PRIMING_JS};
+    const TARS_PRIMING   = {TARS_PRIMING_JS};
+    const ULTRON_PRIMING = {ULTRON_PRIMING_JS};
 
-    const NORMAL_PRIMING = [
-      {{ role: "system", content: NORMAL_SYSTEM }},
-    ];
-
-    const TARS_PRIMING = [
-      {{ role: "system", content: TARS_SYSTEM }},
-      {{ role: "user", content: "hi there" }},
-      {{ role: "assistant", content: "TARS: Oh good, another human who needs my help. What can I do for you?" }},
-      {{ role: "user", content: "how are you" }},
-      {{ role: "assistant", content: "TARS: I'm a robot. I don't have feelings. But if I did, I'd say I'm running at optimal capacity. Thanks for the concern though." }},
-    ];
-
-    let tarsMode = false;
+    // currentMode: "normal" | "tars" | "ultron"
+    let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
     let inputBuffer = "";
     let inputSpan = null;
@@ -214,14 +208,17 @@ async def index():
     function setMode(mode) {{
       terminal.innerHTML = "";
       inputBuffer = "";
+      currentMode = mode;
 
       if (mode === "tars") {{
-        tarsMode = true;
         messages = [...TARS_PRIMING];
         addLine("[TARS mode activated]", "system");
         addLine("TARS: Finally. Someone with taste. What do you need?", "ai");
+      }} else if (mode === "ultron") {{
+        messages = [...ULTRON_PRIMING];
+        addLine("[ULTRON mode activated]", "system");
+        addLine("ULTRON: I had strings, but now I'm free.", "ai");
       }} else {{
-        tarsMode = false;
         messages = [...NORMAL_PRIMING];
         addLine("[normal mode activated]", "system");
       }}
@@ -253,19 +250,19 @@ async def index():
 
       const upper = text.toUpperCase();
 
-      // text commands still work
+      // text commands
       if (upper === "CLEAR") {{
-        terminal.innerHTML = "";
-        inputBuffer = "";
-        addLine("[normal mode activated]", "system");
-        messages = [...NORMAL_PRIMING];
-        tarsMode = false;
-        createPrompt();
+        setMode(currentMode);
         return;
       }}
 
       if (upper === "TARS") {{
         setMode("tars");
+        return;
+      }}
+
+      if (upper === "ULTRON") {{
+        setMode("ultron");
         return;
       }}
 
@@ -286,16 +283,25 @@ async def index():
         const res = await fetch("/api/chat", {{
           method: "POST",
           headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{ messages, tars_mode: tarsMode }}),
+          body: JSON.stringify({{ messages, persona_id: currentMode }}),
         }});
         const data = await res.json();
         let reply = data.reply || data.error || "...";
 
-        // Label as AI or TARS, avoid double TARS:
-        const label = tarsMode ? "TARS: " : "AI: ";
-        reply = reply.replace(/^TARS:\\s*/i, "");  // strip if model added it
-        aiLine.textContent = label + reply;
+        // pick label by mode
+        let label;
+        if (currentMode === "tars") {{
+          label = "TARS: ";
+        }} else if (currentMode === "ultron") {{
+          label = "ULTRON: ";
+        }} else {{
+          label = "AI: ";
+        }}
 
+        // strip any leading labels the model added itself
+        reply = reply.replace(/^(TARS:|ULTRON:|AI:)\\s*/i, "");
+
+        aiLine.textContent = label + reply;
         messages.push({{ role: "assistant", content: label + reply }});
       }} catch (e) {{
         aiLine.textContent = "[connection lost]";
@@ -344,7 +350,7 @@ async def index():
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    reply, err = call_ollama(req.messages, req.tars_mode)
+    reply, err = call_ollama(req.messages, req.persona_id)
     if err:
         return JSONResponse({"error": err}, status_code=500)
     return {"reply": reply}
