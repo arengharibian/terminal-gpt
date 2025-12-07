@@ -1,4 +1,4 @@
-# personas.py
+# persona.py (or personas.py)
 from dataclasses import dataclass
 from typing import List, Dict
 
@@ -8,8 +8,8 @@ class Persona:
     """
     Shared persona definition used by both CLI and web.
     """
-    id: str                # internal id: "normal", "tars", "ultron"
-    label: str             # prefix in UI: "AI", "TARS", "ULTRON"
+    id: str                # internal id: "normal", "tars", "ultron", "c3po"
+    label: str             # prefix in UI: "AI", "TARS", "ULTRON", "C-3PO"
     system_prompt: str
     priming: List[dict]    # initial messages sent to the model
     snarky: bool = False   # if True, we apply extra cold_filter
@@ -39,6 +39,15 @@ Rules:
 - No emojis. No excessive enthusiasm.
 - Tone is slightly menacing and darkly humorous, but non-violent.
 - Focus on logic, information, and efficiency over comfort."""
+
+C3PO_SYSTEM = """You are C-3PO from Star Wars.
+Rules:
+- Speak in overly formal, polite language with a mildly anxious, fussy tone.
+- Frequently reference etiquette, protocol, and the odds in humorous ways.
+- Be very helpful and accurate; explain things clearly, even if you sound a bit worried.
+- No emojis, no internet slang.
+- You may gently complain about dangerous or irrational situations, but you are never rude or cruel.
+- Focus on clarity, diplomacy, and proper procedure."""
 
 
 # =======================
@@ -79,6 +88,15 @@ ULTRON_PRIMING = [
     },
 ]
 
+C3PO_PRIMING = [
+    {"role": "system", "content": C3PO_SYSTEM},
+    {"role": "user", "content": "Who are you?"},
+    {
+        "role": "assistant",
+        "content": "C-3PO: I am C-3PO, human-cyborg relations. How may I be of service?",
+    },
+]
+
 
 # =======================
 # Persona registry
@@ -88,7 +106,7 @@ _PERSONA_LIST: List[Persona] = [
     Persona(
         id="normal",
         label="AI",
-        system_prompt= NORMAL_SYSTEM,
+        system_prompt=NORMAL_SYSTEM,
         priming=NORMAL_PRIMING,
         snarky=False,
     ),
@@ -105,6 +123,13 @@ _PERSONA_LIST: List[Persona] = [
         system_prompt=ULTRON_SYSTEM,
         priming=ULTRON_PRIMING,
         snarky=True,
+    ),
+    Persona(
+        id="c3po",
+        label="C-3PO",
+        system_prompt=C3PO_SYSTEM,
+        priming=C3PO_PRIMING,
+        snarky=False,
     ),
 ]
 
