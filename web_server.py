@@ -177,13 +177,11 @@ async def index():
     const menuBtn = document.getElementById("menu-button");
     const modeMenu = document.getElementById("mode-menu");
 
-    // Priming pulled from Python personas
     const NORMAL_PRIMING = {NORMAL_PRIMING_JS};
     const TARS_PRIMING   = {TARS_PRIMING_JS};
     const ULTRON_PRIMING = {ULTRON_PRIMING_JS};
     const C3PO_PRIMING   = {C3PO_PRIMING_JS};
 
-    // currentMode: "normal" | "tars" | "ultron" | "c3po"
     let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
     let inputBuffer = "";
@@ -235,13 +233,11 @@ async def index():
         addLine("C-3PO: I am C-3PO, human-cyborg relations. Do be careful what you ask for.", "ai");
       }} else {{
         messages = [...NORMAL_PRIMING];
-        addLine("[normal mode activated]", "system");
       }}
 
       createPrompt();
     }}
 
-    // menu open/close
     menuBtn.addEventListener("click", () => {{
       modeMenu.style.display = modeMenu.style.display === "block" ? "none" : "block";
     }});
@@ -265,27 +261,22 @@ async def index():
 
       const upper = text.toUpperCase();
 
-      // text commands
       if (upper === "CLEAR") {{
         setMode(currentMode);
         return;
       }}
-
       if (upper === "TARS") {{
         setMode("tars");
         return;
       }}
-
       if (upper === "ULTRON") {{
         setMode("ultron");
         return;
       }}
-
       if (upper === "C3PO" || upper === "C-3PO") {{
         setMode("c3po");
         return;
       }}
-
       if (upper === "NORMAL" || upper === "AI") {{
         setMode("normal");
         return;
@@ -308,7 +299,6 @@ async def index():
         const data = await res.json();
         let reply = data.reply || data.error || "...";
 
-        // pick label by mode
         let label;
         if (currentMode === "tars") {{
           label = "TARS: ";
@@ -320,7 +310,6 @@ async def index():
           label = "AI: ";
         }}
 
-        // strip any leading labels the model added itself
         reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:)\\s*/i, "");
 
         aiLine.textContent = label + reply;
@@ -361,7 +350,6 @@ async def index():
       terminal.scrollTop = terminal.scrollHeight;
     }});
 
-    addLine("[normal mode activated]", "system");
     createPrompt();
   </script>
 </body>
