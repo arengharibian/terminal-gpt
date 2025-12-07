@@ -1,4 +1,4 @@
-# persona.py (or personas.py)
+# personas.py
 from dataclasses import dataclass
 from typing import List, Dict
 

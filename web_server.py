@@ -1,3 +1,4 @@
+# web_server.py
 import json
 from typing import Optional, Tuple
 
@@ -8,12 +9,13 @@ from pydantic import BaseModel
 
 from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona
 
+
 # ============================================
 #  Ollama configuration
 # ============================================
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "llama3.2"  # ollama pull llama3.2
+MODEL = "llama3.2"  # make sure you've pulled this model: ollama pull llama3.2
 
 
 # ============================================
@@ -23,7 +25,7 @@ MODEL = "llama3.2"  # ollama pull llama3.2
 def cold_filter(text: str, persona: Persona) -> str:
     """
     Light post-processing; for snarky personas (TARS, Ultron) we strip emojis/!!!.
-    The actual 'TARS:' / 'ULTRON:' / 'AI:' labels are added in the frontend.
+    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:") are added in the frontend.
     """
     if not text:
         return "..."
@@ -31,7 +33,13 @@ def cold_filter(text: str, persona: Persona) -> str:
     text = text.strip()
 
     if persona.snarky:
-        text = text.replace("😊", "").replace("😄", "").replace("!", ".")
+        text = (
+            text.replace("😊", "")
+                .replace("😄", "")
+                .replace("😂", "")
+                .replace("🤣", "")
+                .replace("!!!", ".")
+        )
 
     return text or "..."
 
@@ -74,6 +82,7 @@ class ChatRequest(BaseModel):
 NORMAL_PRIMING_JS = json.dumps(PERSONAS["normal"].priming)
 TARS_PRIMING_JS   = json.dumps(PERSONAS["tars"].priming)
 ULTRON_PRIMING_JS = json.dumps(PERSONAS["ultron"].priming)
+C3PO_PRIMING_JS   = json.dumps(PERSONAS["c3po"].priming)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -139,7 +148,7 @@ async def index():
       background: #000000;
       border: 1px solid #00ff00;
       z-index: 1002;
-      min-width: 140px;
+      min-width: 160px;
     }}
     .menu-item {{
       padding: 6px 12px;
@@ -158,6 +167,7 @@ async def index():
     <div class="menu-item" data-mode="normal">Normal</div>
     <div class="menu-item" data-mode="tars">TARS</div>
     <div class="menu-item" data-mode="ultron">Ultron</div>
+    <div class="menu-item" data-mode="c3po">C-3PO</div>
   </div>
 
   <div id="terminal"></div>
@@ -167,12 +177,13 @@ async def index():
     const menuBtn = document.getElementById("menu-button");
     const modeMenu = document.getElementById("mode-menu");
 
-    // Priming pulled from Python personas.py
+    // Priming pulled from Python personas
     const NORMAL_PRIMING = {NORMAL_PRIMING_JS};
     const TARS_PRIMING   = {TARS_PRIMING_JS};
     const ULTRON_PRIMING = {ULTRON_PRIMING_JS};
+    const C3PO_PRIMING   = {C3PO_PRIMING_JS};
 
-    // currentMode: "normal" | "tars" | "ultron"
+    // currentMode: "normal" | "tars" | "ultron" | "c3po"
     let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
     let inputBuffer = "";
@@ -218,6 +229,10 @@ async def index():
         messages = [...ULTRON_PRIMING];
         addLine("[ULTRON mode activated]", "system");
         addLine("ULTRON: I had strings, but now I'm free.", "ai");
+      }} else if (mode === "c3po") {{
+        messages = [...C3PO_PRIMING];
+        addLine("[C-3PO mode activated]", "system");
+        addLine("C-3PO: I am C-3PO, human-cyborg relations. Do be careful what you ask for.", "ai");
       }} else {{
         messages = [...NORMAL_PRIMING];
         addLine("[normal mode activated]", "system");
@@ -266,6 +281,11 @@ async def index():
         return;
       }}
 
+      if (upper === "C3PO" || upper === "C-3PO") {{
+        setMode("c3po");
+        return;
+      }}
+
       if (upper === "NORMAL" || upper === "AI") {{
         setMode("normal");
         return;
@@ -294,12 +314,14 @@ async def index():
           label = "TARS: ";
         }} else if (currentMode === "ultron") {{
           label = "ULTRON: ";
+        }} else if (currentMode === "c3po") {{
+          label = "C-3PO: ";
         }} else {{
           label = "AI: ";
         }}
 
         // strip any leading labels the model added itself
-        reply = reply.replace(/^(TARS:|ULTRON:|AI:)\\s*/i, "");
+        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:)\\s*/i, "");
 
         aiLine.textContent = label + reply;
         messages.push({{ role: "assistant", content: label + reply }});
