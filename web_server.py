@@ -24,8 +24,8 @@ MODEL = "llama3.2"  # make sure you've pulled this model: ollama pull llama3.2
 def cold_filter(text: str, persona: Persona) -> str:
     """
     Light post-processing; for snarky personas we strip emojis/!!!.
-    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:", "GENERAL GRIEVOUS:")
-    are added in the frontend.
+    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:", "GENERAL GRIEVOUS:",
+    "J.A.R.V.I.S.") are added in the frontend.
     """
     if not text:
         return "..."
@@ -84,6 +84,7 @@ TARS_PRIMING_JS     = json.dumps(PERSONAS["tars"].priming)
 ULTRON_PRIMING_JS   = json.dumps(PERSONAS["ultron"].priming)
 C3PO_PRIMING_JS     = json.dumps(PERSONAS["c3po"].priming)
 GRIEVOUS_PRIMING_JS = json.dumps(PERSONAS["grievous"].priming)
+JARVIS_PRIMING_JS   = json.dumps(PERSONAS["jarvis"].priming)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -170,6 +171,7 @@ async def index():
     <div class="menu-item" data-mode="ultron">Ultron</div>
     <div class="menu-item" data-mode="c3po">C-3PO</div>
     <div class="menu-item" data-mode="grievous">General Grievous</div>
+    <div class="menu-item" data-mode="jarvis">J.A.R.V.I.S.</div>
   </div>
 
   <div id="terminal"></div>
@@ -184,6 +186,7 @@ async def index():
     const ULTRON_PRIMING   = {ULTRON_PRIMING_JS};
     const C3PO_PRIMING     = {C3PO_PRIMING_JS};
     const GRIEVOUS_PRIMING = {GRIEVOUS_PRIMING_JS};
+    const JARVIS_PRIMING   = {JARVIS_PRIMING_JS};
 
     let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
@@ -250,6 +253,9 @@ async def index():
       }} else if (mode === "grievous") {{
         messages = [...GRIEVOUS_PRIMING];
         addLine("GENERAL GRIEVOUS: Another curious mind approaches. Do not disappoint me.", "ai");
+      }} else if (mode === "jarvis") {{
+        messages = [...JARVIS_PRIMING];
+        addLine("J.A.R.V.I.S.: Online and ready to assist.", "ai");
       }} else {{
         // normal
         messages = [...NORMAL_PRIMING];
@@ -304,6 +310,10 @@ async def index():
         setMode("grievous");
         return;
       }}
+      if (upper === "JARVIS" || upper === "J.A.R.V.I.S.") {{
+        setMode("jarvis");
+        return;
+      }}
       if (upper === "NORMAL" || upper === "AI") {{
         setMode("normal");
         return;
@@ -335,12 +345,14 @@ async def index():
           label = "C-3PO: ";
         }} else if (currentMode === "grievous") {{
           label = "GENERAL GRIEVOUS: ";
+        }} else if (currentMode === "jarvis") {{
+          label = "J.A.R.V.I.S.: ";
         }} else {{
           label = "AI: ";
         }}
 
         // Strip any persona label the model might try to add itself
-        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:)\\s*/i, "");
+        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:|J\.A\.R\.V\.I\.S\.:)\\s*/i, "");
 
         // Build typed line: [LABEL STATIC][TYPING TEXT][BLINKING CURSOR]
         aiLine.innerHTML = "";
