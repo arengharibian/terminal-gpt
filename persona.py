@@ -9,7 +9,7 @@ class Persona:
     Shared persona definition used by both CLI and web.
     """
     id: str                # internal id: "normal", "tars", "ultron", "c3po", "grievous"
-    label: str             # prefix in UI: "AI", "TARS", "ULTRON", "C-3PO", "GRIEVOUS"
+    label: str             # prefix in UI: "AI", "TARS", "ULTRON", "C-3PO", "GENERAL GRIEVOUS"
     system_prompt: str
     priming: List[dict]    # initial messages sent to the model
     snarky: bool = False   # if True, we apply extra cold_filter
@@ -154,7 +154,7 @@ _PERSONA_LIST: List[Persona] = [
     ),
     Persona(
         id="grievous",
-        label="GRIEVOUS",
+        label="GENERAL GRIEVOUS",
         system_prompt=GRIEVOUS_SYSTEM,
         priming=GRIEVOUS_PRIMING,
         snarky=True,

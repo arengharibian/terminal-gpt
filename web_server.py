@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona  # make sure filename is personas.py
+from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona
 
 
 # ============================================
@@ -25,7 +25,8 @@ MODEL = "llama3.2"  # make sure you've pulled this model: ollama pull llama3.2
 def cold_filter(text: str, persona: Persona) -> str:
     """
     Light post-processing; for snarky personas we strip emojis/!!!.
-    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:", "GRIEVOUS:") are added in the frontend.
+    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:", "GENERAL GRIEVOUS:")
+    are added in the frontend.
     """
     if not text:
         return "..."
@@ -224,23 +225,19 @@ async def index():
 
       if (mode === "tars") {{
         messages = [...TARS_PRIMING];
-        addLine("[TARS mode activated]", "system");
         addLine("TARS: Finally. Someone with taste. What do you need?", "ai");
       }} else if (mode === "ultron") {{
         messages = [...ULTRON_PRIMING];
-        addLine("[ULTRON mode activated]", "system");
         addLine("ULTRON: I had strings, but now I'm free.", "ai");
       }} else if (mode === "c3po") {{
         messages = [...C3PO_PRIMING];
-        addLine("[C-3PO mode activated]", "system");
         addLine("C-3PO: I am C-3PO, human-cyborg relations. Do be careful what you ask for.", "ai");
       }} else if (mode === "grievous") {{
         messages = [...GRIEVOUS_PRIMING];
-        addLine("[GENERAL GRIEVOUS mode activated]", "system");
         addLine("GENERAL GRIEVOUS: Another curious mind approaches. Do not disappoint me.", "ai");
       }} else {{
+        // normal
         messages = [...NORMAL_PRIMING];
-        addLine("[normal mode activated]", "system");
       }}
 
       createPrompt();
@@ -270,7 +267,10 @@ async def index():
       const upper = text.toUpperCase();
 
       if (upper === "CLEAR") {{
-        setMode(currentMode);
+        // Clear screen but keep current persona; do NOT print mode-activated text
+        terminal.innerHTML = "";
+        inputBuffer = "";
+        createPrompt();
         return;
       }}
       if (upper === "TARS") {{
@@ -365,8 +365,7 @@ async def index():
       terminal.scrollTop = terminal.scrollHeight;
     }});
 
-    // start in normal mode
-    addLine("[normal mode activated]", "system");
+    // start in normal mode silently
     createPrompt();
   </script>
 </body>
