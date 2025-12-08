@@ -1,4 +1,3 @@
-# web_server.py
 import json
 from typing import Optional, Tuple
 
@@ -277,7 +276,7 @@ async def index():
     }});
 
     async function send(text) {{
-      // Remove input cursor while AI is "thinking"/typing
+      // Remove input cursor while AI is responding
       if (cursorSpan) cursorSpan.remove();
       if (inputSpan) inputSpan.textContent = text;
 
@@ -312,7 +311,7 @@ async def index():
 
       messages.push({{ role: "user", content: text }});
 
-      // Create an empty AI line; we'll fill it after we get the reply
+      // Create AI line container (we'll fill it after reply)
       const aiLine = document.createElement("div");
       aiLine.className = "line ai";
       terminal.appendChild(aiLine);
@@ -343,10 +342,11 @@ async def index():
         // Strip any persona label the model might try to add itself
         reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:)\\s*/i, "");
 
-        // Build typed line: [LABEL][TYPED TEXT][CURSOR]
+        // Build typed line: [LABEL STATIC][TYPING TEXT][BLINKING CURSOR]
         aiLine.innerHTML = "";
         const labelSpan = document.createElement("span");
         labelSpan.textContent = label;
+        labelSpan.style.userSelect = "none";
         const textSpan = document.createElement("span");
         const aiCursorSpan = document.createElement("span");
         aiCursorSpan.className = "cursor";
@@ -357,10 +357,9 @@ async def index():
         aiLine.appendChild(aiCursorSpan);
         terminal.scrollTop = terminal.scrollHeight;
 
-        const fullContent = label + reply;
-        messages.push({{ role: "assistant", content: fullContent }});
+        messages.push({{ role: "assistant", content: label + reply }});
 
-        // Animate typing, then remove AI cursor and show new prompt
+        // Animate ONLY the reply text; label stays static
         typeWriter(textSpan, reply, () => {{
           aiCursorSpan.remove();
           inputBuffer = "";
@@ -386,7 +385,6 @@ async def index():
         if (t) {{
           send(t);
         }} else {{
-          // Empty line: just reset prompt
           cursorSpan.remove();
           inputBuffer = "";
           createPrompt();
