@@ -218,6 +218,22 @@ async def index():
       terminal.scrollTop = terminal.scrollHeight;
     }}
 
+    // Typewriter animation for AI responses
+    function typeWriter(targetSpan, text, done) {{
+      let i = 0;
+      function step() {{
+        if (i < text.length) {{
+          targetSpan.textContent += text.charAt(i);
+          i++;
+          terminal.scrollTop = terminal.scrollHeight;
+          setTimeout(step, 15);  // typing speed (ms per char)
+        }} else {{
+          if (done) done();
+        }}
+      }}
+      step();
+    }}
+
     function setMode(mode) {{
       terminal.innerHTML = "";
       inputBuffer = "";
@@ -261,13 +277,13 @@ async def index():
     }});
 
     async function send(text) {{
-      cursorSpan.remove();
-      inputSpan.textContent = text;
+      // Remove input cursor while AI is "thinking"/typing
+      if (cursorSpan) cursorSpan.remove();
+      if (inputSpan) inputSpan.textContent = text;
 
       const upper = text.toUpperCase();
 
       if (upper === "CLEAR") {{
-        // Clear screen but keep current persona; do NOT print mode-activated text
         terminal.innerHTML = "";
         inputBuffer = "";
         createPrompt();
@@ -296,9 +312,9 @@ async def index():
 
       messages.push({{ role: "user", content: text }});
 
+      // Create an empty AI line; we'll fill it after we get the reply
       const aiLine = document.createElement("div");
       aiLine.className = "line ai";
-      aiLine.textContent = "...";
       terminal.appendChild(aiLine);
       terminal.scrollTop = terminal.scrollHeight;
 
@@ -327,14 +343,34 @@ async def index():
         // Strip any persona label the model might try to add itself
         reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:)\\s*/i, "");
 
-        aiLine.textContent = label + reply;
-        messages.push({{ role: "assistant", content: label + reply }});
+        // Build typed line: [LABEL][TYPED TEXT][CURSOR]
+        aiLine.innerHTML = "";
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        const textSpan = document.createElement("span");
+        const aiCursorSpan = document.createElement("span");
+        aiCursorSpan.className = "cursor";
+        aiCursorSpan.textContent = "_";
+
+        aiLine.appendChild(labelSpan);
+        aiLine.appendChild(textSpan);
+        aiLine.appendChild(aiCursorSpan);
+        terminal.scrollTop = terminal.scrollHeight;
+
+        const fullContent = label + reply;
+        messages.push({{ role: "assistant", content: fullContent }});
+
+        // Animate typing, then remove AI cursor and show new prompt
+        typeWriter(textSpan, reply, () => {{
+          aiCursorSpan.remove();
+          inputBuffer = "";
+          createPrompt();
+        }});
       }} catch (e) {{
         aiLine.textContent = "[connection lost]";
+        inputBuffer = "";
+        createPrompt();
       }}
-
-      inputBuffer = "";
-      createPrompt();
     }}
 
     document.addEventListener("keydown", (e) => {{
@@ -347,8 +383,10 @@ async def index():
       }} else if (e.key === "Enter") {{
         e.preventDefault();
         const t = inputBuffer.trim();
-        if (t) send(t);
-        else {{
+        if (t) {{
+          send(t);
+        }} else {{
+          // Empty line: just reset prompt
           cursorSpan.remove();
           inputBuffer = "";
           createPrompt();
