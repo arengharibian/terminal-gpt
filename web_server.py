@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona
+from persona import PERSONAS, DEFAULT_PERSONA_ID, Persona  # make sure filename is personas.py
 
 
 # ============================================
@@ -24,8 +24,8 @@ MODEL = "llama3.2"  # make sure you've pulled this model: ollama pull llama3.2
 
 def cold_filter(text: str, persona: Persona) -> str:
     """
-    Light post-processing; for snarky personas (TARS, Ultron) we strip emojis/!!!.
-    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:") are added in the frontend.
+    Light post-processing; for snarky personas we strip emojis/!!!.
+    The actual labels ("TARS:", "ULTRON:", "AI:", "C-3PO:", "GRIEVOUS:") are added in the frontend.
     """
     if not text:
         return "..."
@@ -79,10 +79,11 @@ class ChatRequest(BaseModel):
 
 
 # Precompute priming JSON for the frontend
-NORMAL_PRIMING_JS = json.dumps(PERSONAS["normal"].priming)
-TARS_PRIMING_JS   = json.dumps(PERSONAS["tars"].priming)
-ULTRON_PRIMING_JS = json.dumps(PERSONAS["ultron"].priming)
-C3PO_PRIMING_JS   = json.dumps(PERSONAS["c3po"].priming)
+NORMAL_PRIMING_JS   = json.dumps(PERSONAS["normal"].priming)
+TARS_PRIMING_JS     = json.dumps(PERSONAS["tars"].priming)
+ULTRON_PRIMING_JS   = json.dumps(PERSONAS["ultron"].priming)
+C3PO_PRIMING_JS     = json.dumps(PERSONAS["c3po"].priming)
+GRIEVOUS_PRIMING_JS = json.dumps(PERSONAS["grievous"].priming)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -148,7 +149,7 @@ async def index():
       background: #000000;
       border: 1px solid #00ff00;
       z-index: 1002;
-      min-width: 160px;
+      min-width: 180px;
     }}
     .menu-item {{
       padding: 6px 12px;
@@ -168,6 +169,7 @@ async def index():
     <div class="menu-item" data-mode="tars">TARS</div>
     <div class="menu-item" data-mode="ultron">Ultron</div>
     <div class="menu-item" data-mode="c3po">C-3PO</div>
+    <div class="menu-item" data-mode="grievous">General Grievous</div>
   </div>
 
   <div id="terminal"></div>
@@ -177,10 +179,11 @@ async def index():
     const menuBtn = document.getElementById("menu-button");
     const modeMenu = document.getElementById("mode-menu");
 
-    const NORMAL_PRIMING = {NORMAL_PRIMING_JS};
-    const TARS_PRIMING   = {TARS_PRIMING_JS};
-    const ULTRON_PRIMING = {ULTRON_PRIMING_JS};
-    const C3PO_PRIMING   = {C3PO_PRIMING_JS};
+    const NORMAL_PRIMING   = {NORMAL_PRIMING_JS};
+    const TARS_PRIMING     = {TARS_PRIMING_JS};
+    const ULTRON_PRIMING   = {ULTRON_PRIMING_JS};
+    const C3PO_PRIMING     = {C3PO_PRIMING_JS};
+    const GRIEVOUS_PRIMING = {GRIEVOUS_PRIMING_JS};
 
     let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
@@ -231,8 +234,13 @@ async def index():
         messages = [...C3PO_PRIMING];
         addLine("[C-3PO mode activated]", "system");
         addLine("C-3PO: I am C-3PO, human-cyborg relations. Do be careful what you ask for.", "ai");
+      }} else if (mode === "grievous") {{
+        messages = [...GRIEVOUS_PRIMING];
+        addLine("[GENERAL GRIEVOUS mode activated]", "system");
+        addLine("GENERAL GRIEVOUS: Another curious mind approaches. Do not disappoint me.", "ai");
       }} else {{
         messages = [...NORMAL_PRIMING];
+        addLine("[normal mode activated]", "system");
       }}
 
       createPrompt();
@@ -277,6 +285,10 @@ async def index():
         setMode("c3po");
         return;
       }}
+      if (upper === "GRIEVOUS" || upper === "GENERAL GRIEVOUS") {{
+        setMode("grievous");
+        return;
+      }}
       if (upper === "NORMAL" || upper === "AI") {{
         setMode("normal");
         return;
@@ -306,11 +318,14 @@ async def index():
           label = "ULTRON: ";
         }} else if (currentMode === "c3po") {{
           label = "C-3PO: ";
+        }} else if (currentMode === "grievous") {{
+          label = "GENERAL GRIEVOUS: ";
         }} else {{
           label = "AI: ";
         }}
 
-        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:)\\s*/i, "");
+        // Strip any persona label the model might try to add itself
+        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:)\\s*/i, "");
 
         aiLine.textContent = label + reply;
         messages.push({{ role: "assistant", content: label + reply }});
@@ -350,6 +365,8 @@ async def index():
       terminal.scrollTop = terminal.scrollHeight;
     }});
 
+    // start in normal mode
+    addLine("[normal mode activated]", "system");
     createPrompt();
   </script>
 </body>
