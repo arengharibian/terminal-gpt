@@ -85,6 +85,7 @@ ULTRON_PRIMING_JS   = json.dumps(PERSONAS["ultron"].priming)
 C3PO_PRIMING_JS     = json.dumps(PERSONAS["c3po"].priming)
 GRIEVOUS_PRIMING_JS = json.dumps(PERSONAS["grievous"].priming)
 JARVIS_PRIMING_JS   = json.dumps(PERSONAS["jarvis"].priming)
+AUTO_PRIMING_JS     = json.dumps(PERSONAS["auto"].priming)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -172,6 +173,7 @@ async def index():
     <div class="menu-item" data-mode="c3po">C-3PO</div>
     <div class="menu-item" data-mode="grievous">General Grievous</div>
     <div class="menu-item" data-mode="jarvis">J.A.R.V.I.S.</div>
+    <div class="menu-item" data-mode="auto">AUTO</div>
   </div>
 
   <div id="terminal"></div>
@@ -187,6 +189,7 @@ async def index():
     const C3PO_PRIMING     = {C3PO_PRIMING_JS};
     const GRIEVOUS_PRIMING = {GRIEVOUS_PRIMING_JS};
     const JARVIS_PRIMING   = {JARVIS_PRIMING_JS};
+    const AUTO_PRIMING     = {AUTO_PRIMING_JS};
 
     let currentMode = "normal";
     let messages = [...NORMAL_PRIMING];
@@ -256,6 +259,9 @@ async def index():
       }} else if (mode === "jarvis") {{
         messages = [...JARVIS_PRIMING];
         addLine("J.A.R.V.I.S.: Online and ready to assist.", "ai");
+      }} else if (mode === "auto") {{
+        messages = [...AUTO_PRIMING];
+        addLine("AUTO: Directive acknowledged. Awaiting command.", "ai");
       }} else {{
         // normal
         messages = [...NORMAL_PRIMING];
@@ -314,6 +320,10 @@ async def index():
         setMode("jarvis");
         return;
       }}
+      if (upper === "AUTO" || upper === "AUTOPILOT") {{
+        setMode("auto");
+        return;
+      }}
       if (upper === "NORMAL" || upper === "AI") {{
         setMode("normal");
         return;
@@ -347,12 +357,14 @@ async def index():
           label = "GENERAL GRIEVOUS: ";
         }} else if (currentMode === "jarvis") {{
           label = "J.A.R.V.I.S.: ";
+        }} else if (currentMode === "auto") {{
+          label = "AUTO: ";
         }} else {{
           label = "AI: ";
         }}
 
         // Strip any persona label the model might try to add itself
-        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:|J\.A\.R\.V\.I\.S\.:)\\s*/i, "");
+        reply = reply.replace(/^(TARS:|ULTRON:|AI:|C-3PO:|GENERAL GRIEVOUS:|J\.A\.R\.V\.I\.S\.:|AUTO:)\\s*/i, "");
 
         // Build typed line: [LABEL STATIC][TYPING TEXT][BLINKING CURSOR]
         aiLine.innerHTML = "";
