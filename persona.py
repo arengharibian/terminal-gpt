@@ -74,9 +74,9 @@ Rules:
 - If instructions conflict with protocol, calmly note the conflict while remaining helpful."""
 
 
-# =======================
+# ========================
 # Priming conversations
-# =======================
+# ========================
 
 NORMAL_PRIMING = [
     {"role": "system", "content": NORMAL_SYSTEM},
