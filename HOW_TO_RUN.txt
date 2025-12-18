@@ -61,7 +61,7 @@ CLI mode:
 
 Web mode:
 
-    uvicorn terminal_gpt:app --reload
+    uvicorn web_server:app --reload
 
 Then open: http://127.0.0.1:8000
 
