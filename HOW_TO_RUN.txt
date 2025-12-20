@@ -14,9 +14,9 @@ from Interstellar. Helpful answers with dry wit and sarcasm.
 No API keys. Runs locally.
 
 
-------------------------------------------------------------
+-------------------------------------------------------------
 1. Install Dependencies
-------------------------------------------------------------
+-------------------------------------------------------------
 
     cd terminal-gpt
     python3 -m venv .venv
